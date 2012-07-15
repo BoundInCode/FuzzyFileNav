@@ -11,9 +11,9 @@ import os.path as path
 import re
 
 PLATFORM = sublime.platform()
-
-# Move to settings file
-HOME = "/Some/Folder/Here"
+ROOT = "/"
+HOME = "/Users/liam"
+REGEX_EXCLUDE = ["\\.[\\w]+"]
 
 
 class FuzzyEventListener(sublime_plugin.EventListener):
@@ -21,64 +21,106 @@ class FuzzyEventListener(sublime_plugin.EventListener):
         # New window gained activation? Reset fuzzy command state
         if FuzzyFileNavCommand.active and view.window() and view.window().id() != FuzzyFileNavCommand.win_id:
             FuzzyFileNavCommand.reset()
-        if FuzzyFileNavCommand.active and FuzzyFileNavCommand.view_id != view.id():
-            FuzzyFileNavCommand.view_id = view.id()
+        if FuzzyFileNavCommand.active and view.settings().get('is_widget'):
+            if FuzzyFileNavCommand.view_id != view.id():
+                FuzzyFileNavCommand.view_id = view.id()
+            if not view.sel()[0].a: # compensating for on_activated being called 3 times...
+                edit = view.begin_edit()
+                view.insert(edit, 0, FuzzyFileNavCommand.initial_text)
+                view.end_edit(edit)
+
+    def on_query_context(self, view, key, operator, operand, match_all):
+        sel = view.sel()[0]  
+        line_text = view.substr(view.line(sel))
+        if key == "pikachoose_window_showing":
+            return FuzzyFileNavCommand.active == operand  
+        if key == "at_pikachoose_start":
+            return (FuzzyFileNavCommand.active and len(line_text) < 1) == operand
 
     def on_modified(self, view):
         if FuzzyFileNavCommand.active and FuzzyFileNavCommand.view_id and FuzzyFileNavCommand.view_id == view.id():
             sel = view.sel()[0]
             win = view.window()
             line_text = view.substr(view.line(sel))
+
+            if len(FuzzyFileNavCommand.initial_text)>0 and len(line_text) < 1:
+                FuzzyFileNavCommand.fuzzy_reload = True
+                win.run_command("fuzzy_file_nav", {"start": FuzzyFileNavCommand.cwd})
+
             # Go Home
-            m = re.match(r"^(?:(~)|([\w\W]*)\:mkdir|([\w\W]*)\:mkfile)", line_text)
+            m = re.match(r"^(?:(~)|(/)|\:(mkdir)|\:(mkfile))", line_text)
             if m:
                 if m.group(1):
-                    FuzzyFileNavCommand.fuzzy_relaod = True
-                    win.run_command("fuzzy_file_nav", {"start": HOME, "regex_exclude": FuzzyFileNavCommand.regex_exclude})
+                    FuzzyFileNavCommand.fuzzy_reload = True
+                    win.run_command("fuzzy_file_nav", {"start": HOME})
                 elif m.group(2):
-                    win.run_command("hide_overlay")
-                    FuzzyFileNavCommand.reset()
-                    win.run_command("fuzzy_make_folder", {"cwd": FuzzyFileNavCommand.cwd, "name": m.group(2)})
+                    FuzzyFileNavCommand.fuzzy_reload = True
+                    win.run_command("fuzzy_file_nav", {"start": ROOT})
                 elif m.group(3):
                     win.run_command("hide_overlay")
                     FuzzyFileNavCommand.reset()
-                    win.run_command("fuzzy_make_file", {"cwd": FuzzyFileNavCommand.cwd, "name": m.group(3)})
+                    win.run_command("fuzzy_folder_create", {"cwd": FuzzyFileNavCommand.cwd})
+                elif m.group(4):
+                    win.run_command("hide_overlay")
+                    FuzzyFileNavCommand.reset()
+                    win.run_command("fuzzy_file_create", {"cwd": FuzzyFileNavCommand.cwd})
+
+            if view.substr(sel.a-1) == '/':
+                FuzzyFileNavCommand.fuzzy_reload = True
+                start = path.join(FuzzyFileNavCommand.cwd, line_text)
+                win.run_command("fuzzy_file_nav", {"start": start})
 
 
-class FuzzyMakeFileCommand(sublime_plugin.WindowCommand):
-    def run(self, cwd, name):
-        full_name = path.join(cwd, name)
-        if path.exists(cwd):
-            if not path.exists(full_name):
-                try:
-                    with open(full_name, "a"):
-                        pass
-                    self.window.open_file(full_name)
-                except:
-                    sublime.error_message("Could not create %d!" % full_name)
-            else:
-                sublime.error_message("%d already exists!" % full_name)
-        else:
-            sublime.error_message("%d does not exist!" % cwd)
+class FuzzyFileCreateCommand(sublime_plugin.WindowCommand):
+    def run(self, cwd):
+        self.cwd = cwd
+        self.window.show_input_panel(
+            "Create File:",
+            "",
+            self.make,
+            None,
+            None
+        )
+
+    def make(self, value):
+        name = path.join(self.cwd, value)
+        if path.exists(self.cwd) and not path.exists(name):
+            try:
+                with open(name, "a"):
+                    pass
+                self.window.open_file(name)
+            except:
+                sublime.error_message("Could not create %d!" % name)
 
 
-class FuzzyMakeFolderCommand(sublime_plugin.WindowCommand):
-    def run(self, cwd, name):
-        full_name = path.join(cwd, name)
-        if path.exists(cwd):
-            if not path.exists(full_name):
-                try:
-                    os.makedirs(full_name)
-                except:
-                    sublime.error_message("Could not create %d!" % full_name)
-            else:
-                sublime.error_message("%d already exists!" % full_name)
-        else:
-            sublime.error_message("%d does not exist!" % cwd)
+class FuzzyFolderCreateCommand(sublime_plugin.WindowCommand):
+    def run(self, cwd):
+        self.cwd = cwd
+        self.window.show_input_panel(
+            "Make Directory:",
+            "",
+            self.make,
+            None,
+            None
+        )
 
+    def make(self, value):
+        name = path.join(self.cwd, value)
+        if path.exists(self.cwd) and not path.exists(name):
+            try:
+                os.makedirs(name)
+            except:
+                sublime.error_message("Could not create %d!" % name)
+
+
+class FuzzyShowHiddenCommand(sublime_plugin.WindowCommand):
+    def run(self):
+        start = FuzzyFileNavCommand.cwd
+        FuzzyFileNavCommand.fuzzy_reload = True
+        self.window.run_command("fuzzy_file_nav", {"start": start, "regex_exclude": False,"initial_text":"."})
 
 class FuzzyStartFromFileCommand(sublime_plugin.TextCommand):
-    def run(self, edit, regex_exclude=[]):
+    def run(self, edit, regex_exclude=True):
         # Check if you can retrieve a file name (means it exists on disk).
         name = self.view.file_name()
         if name:
@@ -90,7 +132,7 @@ class FuzzyFileNavCommand(sublime_plugin.WindowCommand):
     win_id = None
     view_id = None
     regex_exclude = []
-    fuzzy_relaod = False
+    fuzzy_reload = False
 
     @classmethod
     def reset(cls):
@@ -98,15 +140,15 @@ class FuzzyFileNavCommand(sublime_plugin.WindowCommand):
         cls.win_id = None
         cls.view_id = None
 
-    def run(self, start=None, regex_exclude=[]):
+    def run(self, start=None, regex_exclude=True, initial_text=""):
         if FuzzyFileNavCommand.active:
-            FuzzyFileNavCommand.active = False
             self.window.run_command("hide_overlay")
 
         FuzzyFileNavCommand.active = True
         FuzzyFileNavCommand.view_id = None
+        FuzzyFileNavCommand.initial_text = initial_text
         FuzzyFileNavCommand.win_id = self.window.id()
-        FuzzyFileNavCommand.regex_exclude = regex_exclude
+        FuzzyFileNavCommand.regex_exclude = REGEX_EXCLUDE if regex_exclude else []
 
         # Check if a start destination has been given
         # and ensure it is valid.
@@ -117,7 +159,7 @@ class FuzzyFileNavCommand(sublime_plugin.WindowCommand):
             self.display_files(FuzzyFileNavCommand.cwd)
         except:
             FuzzyFileNavCommand.reset()
-            sublime.error_message(FuzzyFileNavCommand.cwd + "is not accessible!")
+            sublime.error_message(FuzzyFileNavCommand.cwd + " is not accessible!")
 
     def get_files(self, cwd):
         # Get files/drives (windows).
@@ -131,7 +173,7 @@ class FuzzyFileNavCommand(sublime_plugin.WindowCommand):
             # Check exclusion regex to omit files.
             if valid:
                 for regex in FuzzyFileNavCommand.regex_exclude:
-                    if re.match(regex, full_path):
+                    if re.match(regex, f):
                         valid = False
 
             # Store file/folder info.
@@ -167,7 +209,7 @@ class FuzzyFileNavCommand(sublime_plugin.WindowCommand):
 
     def check_selection(self, selection):
         if selection > -1:
-            FuzzyFileNavCommand.fuzzy_relaod = False
+            FuzzyFileNavCommand.fuzzy_reload = False
             # The first selection is the "go up a directory" option.
             FuzzyFileNavCommand.cwd = self.back_dir(FuzzyFileNavCommand.cwd) if selection == 0 else path.join(FuzzyFileNavCommand.cwd, FuzzyFileNavCommand.files[selection])
 
@@ -187,7 +229,7 @@ class FuzzyFileNavCommand(sublime_plugin.WindowCommand):
                 except:
                     FuzzyFileNavCommand.reset()
                     sublime.error_message(FuzzyFileNavCommand.cwd + "is not accessible!")
-        elif not FuzzyFileNavCommand.fuzzy_relaod:
+        elif not FuzzyFileNavCommand.fuzzy_reload:
             FuzzyFileNavCommand.reset()
         else:
-            FuzzyFileNavCommand.fuzzy_relaod = False
+            FuzzyFileNavCommand.fuzzy_reload = False

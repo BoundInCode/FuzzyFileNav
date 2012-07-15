@@ -1,0 +1,11 @@
+[
+{ "keys": ["super+o"], "command": "fuzzy_start_from_file", "args": {"regex_exclude": true}},
+{ "keys": ["."], "command": "fuzzy_show_hidden", "context": 
+      [
+      { "operand": true, 
+        "operator": "equal",
+        "match_all": true,
+        "key": "at_pikachoose_start"}
+      ]
+}
+]
