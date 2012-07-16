@@ -7,5 +7,13 @@
         "match_all": true,
         "key": "at_pikachoose_start"}
       ]
+},
+{ "keys": [":"], "command": "fuzzy_reload", "context": 
+      [
+      { "operand": true,
+        "operator": "equal",
+        "match_all": true,
+        "key": "fuzzy_window_showing"}
+      ]
 }
 ]
