@@ -41,9 +41,9 @@ class FuzzyEventListener(sublime_plugin.EventListener):
             sel = view.sel()[0]
             win = view.window()
             line_text = view.substr(view.line(sel))
+            
             if line_text != FuzzyFileNavCommand.initial_text:
                 view.run_command('fuzzy_reload')
-            return
 
             if len(FuzzyFileNavCommand.initial_text)>0 and len(line_text) < 1:
                 FuzzyFileNavCommand.fuzzy_reload = True
