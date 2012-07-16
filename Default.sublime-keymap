@@ -5,7 +5,7 @@
       { "operand": true, 
         "operator": "equal",
         "match_all": true,
-        "key": "at_pikachoose_start"}
+        "key": "at_fuzzy_start"}
       ]
 },
 { "keys": [":"], "command": "fuzzy_reload", "context": 

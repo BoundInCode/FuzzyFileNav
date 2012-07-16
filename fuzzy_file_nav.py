@@ -41,13 +41,16 @@ class FuzzyEventListener(sublime_plugin.EventListener):
             sel = view.sel()[0]
             win = view.window()
             line_text = view.substr(view.line(sel))
+            if line_text != FuzzyFileNavCommand.initial_text:
+                view.run_command('fuzzy_reload')
+            return
 
             if len(FuzzyFileNavCommand.initial_text)>0 and len(line_text) < 1:
                 FuzzyFileNavCommand.fuzzy_reload = True
                 win.run_command("fuzzy_file_nav", {"start": FuzzyFileNavCommand.cwd})
 
             # Go Home
-            m = re.match(r"^(?:(~)|(/))", line_text)
+            m = re.match(r"^(?:(~/)|(/))", line_text)
             if m:
                 if m.group(1):
                     FuzzyFileNavCommand.fuzzy_reload = True
@@ -56,6 +59,7 @@ class FuzzyEventListener(sublime_plugin.EventListener):
                     FuzzyFileNavCommand.fuzzy_reload = True
                     win.run_command("fuzzy_file_nav", {"start": ROOT})
 
+            # fast select folder
             if view.substr(sel.a-1) == '/':
                 FuzzyFileNavCommand.fuzzy_reload = True
                 start = path.join(FuzzyFileNavCommand.cwd, line_text)
@@ -149,7 +153,7 @@ class FuzzyFileNavCommand(sublime_plugin.WindowCommand):
         f = FuzzyFileNavCommand
         f.files = self.get_files(cwd)
 
-        if not path.exists(path.join(cwd,f.initial_text)):
+        if len(f.initial_text)>0 and not path.exists(path.join(cwd,f.initial_text)):
             f.files.extend(
                 ["Create File "+f.initial_text,"Create New Folder "+f.initial_text+"/"])
         self.window.show_quick_panel(f.files, self.check_selection)
@@ -191,8 +195,8 @@ class FuzzyFileNavCommand(sublime_plugin.WindowCommand):
                 sublime.error_message("Could not create %d!" % name)
 
     def check_selection(self, selection):
+        f = FuzzyFileNavCommand
         if selection > -1:
-            f = FuzzyReloadCommand
             f.fuzzy_reload = False
             # The first selection is the "go up a directory" option.
             if f.initial_text:
