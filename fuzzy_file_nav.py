@@ -175,7 +175,6 @@ class FuzzyFileNavCommand(sublime_plugin.WindowCommand):
     def create_file(self):
         print 'creating file'
         name = path.join(FuzzyFileNavCommand.cwd, FuzzyFileNavCommand.initial_text)
-        print name
         if path.exists(FuzzyFileNavCommand.cwd) and not path.exists(name):
             try:
                 with open(name, "a"):
@@ -187,7 +186,7 @@ class FuzzyFileNavCommand(sublime_plugin.WindowCommand):
     def create_folder(self):
         print 'creating folder'
         name = path.join(FuzzyFileNavCommand.cwd, FuzzyFileNavCommand.initial_text)
-        print name
+
         if path.exists(FuzzyFileNavCommand.cwd) and not path.exists(name):
             try:
                 os.makedirs(name)
@@ -227,4 +226,3 @@ class FuzzyFileNavCommand(sublime_plugin.WindowCommand):
             f.reset()
         else:
             f.fuzzy_reload = False
-            f.initial_text = ""
