@@ -48,7 +48,7 @@ class FuzzyEventListener(sublime_plugin.EventListener):
                 win.run_command("fuzzy_file_nav", {"start": FuzzyFileNavCommand.cwd})
 
             # Go Home
-            m = re.match(r"^(?:(~)|(/)|\:(mkdir)|\:(mkfile))", line_text)
+            m = re.match(r"^(?:(~)|(/)|(.*\:))", line_text)
             if m:
                 if m.group(1):
                     FuzzyFileNavCommand.fuzzy_reload = True
@@ -57,13 +57,16 @@ class FuzzyEventListener(sublime_plugin.EventListener):
                     FuzzyFileNavCommand.fuzzy_reload = True
                     win.run_command("fuzzy_file_nav", {"start": ROOT})
                 elif m.group(3):
-                    win.run_command("hide_overlay")
-                    FuzzyFileNavCommand.reset()
-                    win.run_command("fuzzy_folder_create", {"cwd": FuzzyFileNavCommand.cwd})
-                elif m.group(4):
-                    win.run_command("hide_overlay")
-                    FuzzyFileNavCommand.reset()
-                    win.run_command("fuzzy_file_create", {"cwd": FuzzyFileNavCommand.cwd})
+                    FuzzyFileNavCommand.fuzzy_reload = True
+                    win.run_command("fuzzy_file_nav", {"start": FuzzyFileNavCommand.cwd, "initial_text":line_text})
+                # elif m.group(3):
+                #     win.run_command("hide_overlay")
+                #     FuzzyFileNavCommand.reset()
+                #     win.run_command("fuzzy_folder_create", {"cwd": FuzzyFileNavCommand.cwd})
+                # elif m.group(4):
+                #     win.run_command("hide_overlay")
+                #     FuzzyFileNavCommand.reset()
+                #     win.run_command("fuzzy_file_create", {"cwd": FuzzyFileNavCommand.cwd})
 
             if view.substr(sel.a-1) == '/':
                 FuzzyFileNavCommand.fuzzy_reload = True
@@ -191,6 +194,10 @@ class FuzzyFileNavCommand(sublime_plugin.WindowCommand):
 
     def display_files(self, cwd):
         FuzzyFileNavCommand.files = self.get_files(cwd)
+        if FuzzyFileNavCommand.initial_text[-1:] == ':':
+            FuzzyFileNavCommand.files.extend(
+                ["Create File "+FuzzyFileNavCommand.initial_text,
+                "Create New Folder "+FuzzyFileNavCommand.initial_text+"/"])
         self.window.show_quick_panel(FuzzyFileNavCommand.files, self.check_selection)
 
     def back_dir(self, cwd):
@@ -207,11 +214,36 @@ class FuzzyFileNavCommand(sublime_plugin.WindowCommand):
         # Search through valid drive names and see if they exist.
         return [unicode(d + ":") for d in "ABCDEFGHIJKLMNOPQRSTUVWXYZ" if path.exists(d + ":")]
 
+    def create_file(self,path):
+        print 'creating file'
+        name = path.join(FuzzyFileNavCommand.cwd, FuzzyFileNavCommand.initial_text[:-1])
+        if path.exists(FuzzyFileNavCommand.cwd) and not path.exists(name):
+            try:
+                with open(name, "a"):
+                    pass
+                self.window.open_file(name)
+            except:
+                sublime.error_message("Could not create %d!" % name)
+
+    def create_folder(self,path):
+        print 'creating folder'
+        name = path.join(FuzzyFileNavCommand.cwd, FuzzyFileNavCommand.initial_text[:-1])
+        if path.exists(FuzzyFileNavCommand.cwd) and not path.exists(name):
+            try:
+                os.makedirs(name)
+            except:
+                sublime.error_message("Could not create %d!" % name)
+
     def check_selection(self, selection):
         if selection > -1:
             FuzzyFileNavCommand.fuzzy_reload = False
             # The first selection is the "go up a directory" option.
             FuzzyFileNavCommand.cwd = self.back_dir(FuzzyFileNavCommand.cwd) if selection == 0 else path.join(FuzzyFileNavCommand.cwd, FuzzyFileNavCommand.files[selection])
+            if FuzzyFileNavCommand.initial_text[:-1] == ':':
+                if selection == len(FuzzyFileNavCommand.files-1):
+                    self.create_file()
+                elif selection == len(FuzzyFileNavCommand.files-2):
+                    self.create_folder()
 
             # Check if the option is a folder or if we are at the root (needed for windows)
             if (path.isdir(FuzzyFileNavCommand.cwd) or FuzzyFileNavCommand.cwd == self.get_root_path()):
